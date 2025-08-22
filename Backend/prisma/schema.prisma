@@ -1,0 +1,406 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ENUMS
+enum UserType {
+  PWD
+  Employer
+  Administrator
+}
+
+enum AccountStatus {
+  Active
+  Inactive
+  Suspended
+  Deleted
+}
+
+enum Disability_Severity {
+  Mild
+  Moderate
+  Severe
+}
+
+enum Gender {
+  Male
+  Female
+  Other
+}
+
+enum EmploymentType {
+  Full_time
+  Part_time
+  Contract
+  Freelance
+  Internship
+}
+
+enum WorkArrangement {
+  On_site
+  Remote
+  Hybrid
+}
+
+enum SalaryType {
+  Hourly
+  Daily
+  Monthly
+  Annually
+  Milestone_based
+}
+
+enum ExperienceLevel {
+  Entry
+  Mid
+  Senior
+  Executive
+}
+
+enum TicketCategory {
+  Technical
+  Account
+  Payment
+  Discrimination
+  Accessibility
+  Other
+}
+
+enum TicketPriority {
+  Low
+  Medium
+  High
+  Urgent
+}
+
+enum TicketStatus {
+  Open
+  In_Progress
+  Resolved
+  Closed
+}
+
+enum TargetAudience {
+  PWD
+  Employer
+  All
+}
+
+enum WithdrawalStatus {
+  Pending
+  Approved
+  Rejected
+  Processed
+}
+
+enum TransactionType {
+  Payment
+  Withdrawal
+  Refund
+  Fee
+}
+
+enum TransactionStatus {
+  Pending
+  Completed
+  Failed
+  Cancelled
+}
+
+enum ReviewerType {
+  Employer
+  Job_Seeker
+}
+
+// MODELS
+
+model Users {
+  user_id        Int           @id @default(autoincrement())
+  email          String        @unique
+  password_hash  String
+  phone_number   String        @unique
+  user_type      UserType
+  account_status AccountStatus @default(Active)
+  is_verified    Boolean       @default(false)
+  created_at     DateTime      @default(now())
+
+  messages              Chat_Message[]        @relation("SenderMessages")
+  pwd_Profile           Pwd_Profile?          @relation("UserToPWD")
+  employer_Profile      Employer_Profile?     @relation("UserToEmployer")
+  reviews_written       reviews[]             @relation("Reviewer")
+  reviews_received      reviews[]             @relation("Reviewee")
+  notifications         Notifications[]
+  support_tickets       support_tickets[]     @relation("TicketUser")
+  assigned_tickets      support_tickets[]     @relation("TicketAssignee")
+  resources             resources[]
+  withdrawal_requests   withdrawal_requests[] @relation("WithdrawalUser")
+  processed_withdrawals withdrawal_requests[] @relation("Processor")
+  chatbot_logs          chatbot_logs[]
+}
+
+model Pwd_Profile {
+  pwd_id              Int                 @id @default(autoincrement())
+  user_id             Int                 @unique
+  first_name          String
+  last_name           String
+  middle_name         String
+  profile_picture     String
+  bio                 String
+  disability_Type     String
+  disability_severity Disability_Severity
+  accessibility_Needs String
+  location_City       String
+  location_Province   String
+  location_Country    String
+  date_of_birth       DateTime
+  gender              Gender
+  rating              Float               @default(0.0)
+  created_at          DateTime            @default(now())
+  updated_at          DateTime            @updatedAt
+
+  user             Users              @relation("UserToPWD", fields: [user_id], references: [user_id], onDelete: Cascade)
+  resumes          Resumes[]
+  applications     Applications[]
+  transactions     transactions[]     @relation("TransactionPayee")
+  ai_match_results ai_match_results[]
+}
+
+model Employer_Profile {
+  employer_id            Int      @id @default(autoincrement())
+  user_id                Int      @unique
+  company_name           String
+  company_logo           String
+  company_description    String
+  accessibility_features String
+  industry               String
+  location_City          String
+  location_Province      String
+  location_Country       String
+  rating                 Float    @default(0.0)
+  created_at             DateTime @default(now())
+  updated_at             DateTime @updatedAt
+
+  user         Users          @relation("UserToEmployer", fields: [user_id], references: [user_id], onDelete: Cascade)
+  job_listings Job_Listings[]
+  transactions transactions[] @relation("TransactionPayer")
+}
+
+model Resumes {
+  resume_id       Int      @id @default(autoincrement())
+  pwd_id          Int
+  title           String   @db.VarChar(255)
+  summary         String
+  skills          String
+  work_experience String
+  education       String
+  certifications  String
+  achievements    String
+  file_path       String
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  pwd_profile  Pwd_Profile    @relation(fields: [pwd_id], references: [pwd_id])
+  applications Applications[]
+}
+
+model Chat_Thread {
+  thread_id      Int      @id @default(autoincrement())
+  application_id Int
+  pwd_id         Int
+  employer_id    Int
+  created_at     DateTime @default(now())
+  is_active      Boolean  @default(true)
+
+  messages Chat_Message[] @relation("ThreadMessages")
+}
+
+model Chat_Message {
+  message_id Int      @id @default(autoincrement())
+  thread_id  Int
+  sender_id  Int
+  content    String
+  created_at DateTime @default(now())
+
+  thread Chat_Thread @relation("ThreadMessages", fields: [thread_id], references: [thread_id], onDelete: Cascade)
+  sender Users       @relation("SenderMessages", fields: [sender_id], references: [user_id], onDelete: Cascade)
+}
+
+model withdrawal_requests {
+  withdrawal_id  Int              @id @default(autoincrement())
+  user_id        Int
+  amount         Decimal          @db.Decimal(10, 2)
+  payment_method String           @db.VarChar(50)
+  status         WithdrawalStatus
+  requested_at   DateTime
+  processed_at   DateTime
+  processed_by   Int
+
+  user      Users @relation("WithdrawalUser", fields: [user_id], references: [user_id])
+  processor Users @relation("Processor", fields: [processed_by], references: [user_id])
+}
+
+model Applications {
+  application_id    Int      @id @default(autoincrement())
+  job_id            Int
+  pwd_id            Int
+  resume_id         Int
+  custom_message    String
+  proposed_salary   Decimal  @db.Decimal(10, 2)
+  submitted_at      DateTime
+  updated_at        DateTime @updatedAt
+  status_changed_at DateTime
+
+  job_listing  Job_Listings   @relation(fields: [job_id], references: [job_id])
+  pwd_profile  Pwd_Profile    @relation(fields: [pwd_id], references: [pwd_id])
+  resume       Resumes        @relation(fields: [resume_id], references: [resume_id])
+  reviews      reviews[]
+  transactions transactions[]
+}
+
+model reviews {
+  review_id      Int          @id @default(autoincrement())
+  reviewer_id    Int
+  reviewee_id    Int
+  application_id Int
+  rating         Int
+  comment        String
+  reviewer_type  ReviewerType
+  is_public      Boolean
+  created_at     DateTime     @default(now())
+  updated_at     DateTime     @updatedAt
+
+  reviewer    Users        @relation("Reviewer", fields: [reviewer_id], references: [user_id])
+  reviewee    Users        @relation("Reviewee", fields: [reviewee_id], references: [user_id])
+  application Applications @relation(fields: [application_id], references: [application_id])
+}
+
+model transactions {
+  transaction_id   Int               @id @default(autoincrement())
+  payer_id         Int
+  payee_id         Int
+  application_id   Int
+  amount           Decimal           @db.Decimal(10, 2)
+  payment_method   String            @db.VarChar(50)
+  transaction_type TransactionType
+  status           TransactionStatus
+  reference_number String            @db.VarChar(255)
+  created_at       DateTime          @default(now())
+  processed_at     DateTime
+
+  payer       Employer_Profile @relation("TransactionPayer", fields: [payer_id], references: [employer_id])
+  payee       Pwd_Profile      @relation("TransactionPayee", fields: [payee_id], references: [pwd_id])
+  application Applications     @relation(fields: [application_id], references: [application_id])
+}
+
+model Notifications {
+  notification_id Int       @id @default(autoincrement())
+  user_id         Int
+  type            String
+  title           String
+  content         String
+  is_read         Boolean   @default(false)
+  created_at      DateTime  @default(now())
+  read_at         DateTime?
+
+  user Users @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+}
+
+model Job_Categories {
+  category_id Int    @id @default(autoincrement())
+  name        String @unique
+  description String
+
+  job_listings Job_Listings[]
+}
+
+model Job_Listings {
+  job_id                 Int             @id @default(autoincrement())
+  employer_id            Int
+  category_id            Int
+  title                  String          @db.VarChar(255)
+  description            String
+  skills_required        String
+  employment_type        EmploymentType
+  work_arrangement       WorkArrangement
+  salary_min             Decimal         @db.Decimal(10, 2)
+  salary_max             Decimal         @db.Decimal(10, 2)
+  salary_type            SalaryType
+  location_city          String          @db.VarChar(100)
+  location_province      String          @db.VarChar(100)
+  location_country       String          @db.VarChar(100)
+  accessibility_features String
+  experience_level       ExperienceLevel
+  application_deadline   DateTime        @db.Date
+  applications_count     Int             @default(0)
+  created_at             DateTime        @default(now())
+  updated_at             DateTime        @updatedAt
+
+  employer         Employer_Profile   @relation(fields: [employer_id], references: [employer_id], onDelete: Cascade)
+  category         Job_Categories     @relation(fields: [category_id], references: [category_id], onDelete: Cascade)
+  applications     Applications[]
+  ai_match_results ai_match_results[]
+}
+
+model support_tickets {
+  ticket_id   Int            @id @default(autoincrement())
+  user_id     Int
+  subject     String         @db.VarChar(255)
+  description String
+  category    TicketCategory
+  priority    TicketPriority
+  status      TicketStatus
+  assigned_to Int
+  created_at  DateTime       @default(now())
+  updated_at  DateTime       @updatedAt
+
+  user     Users @relation("TicketUser", fields: [user_id], references: [user_id])
+  assignee Users @relation("TicketAssignee", fields: [assigned_to], references: [user_id])
+}
+
+model resources {
+  resource_id     Int            @id @default(autoincrement())
+  created_by      Int
+  title           String         @db.VarChar(255)
+  description     String
+  resource_type   String         @db.VarChar(100)
+  file_path       String
+  category        String         @db.VarChar(100)
+  target_audience TargetAudience
+  created_at      DateTime       @default(now())
+  updated_at      DateTime       @updatedAt
+
+  user Users @relation(fields: [created_by], references: [user_id])
+}
+
+model ai_match_results {
+  match_id                  Int      @id @default(autoincrement())
+  job_id                    Int
+  pwd_id                    Int
+  overall_score             Float
+  skills_match_score        Float
+  experience_match_score    Float
+  location_match_score      Float
+  accessibility_match_score Float
+  matched_on                DateTime
+
+  // Relations
+  job_listing Job_Listings @relation(fields: [job_id], references: [job_id])
+  pwd_profile Pwd_Profile  @relation(fields: [pwd_id], references: [pwd_id])
+}
+
+model chatbot_logs {
+  log_id    Int      @id @default(autoincrement())
+  user_id   Int
+  message   String
+  response  String
+  timestamp DateTime @default(now())
+
+  // Relations
+  user Users @relation(fields: [user_id], references: [user_id])
+}
